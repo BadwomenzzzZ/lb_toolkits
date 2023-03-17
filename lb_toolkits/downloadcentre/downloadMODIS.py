@@ -1,292 +1,155 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : downloadMODIS.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/8/12 15:48      Lee       1.0         
-@Description
-------------------------------------
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
  https://wiki.earthdata.nasa.gov/display/EDSC/Earthdata+Search+URL+Parameters
  https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/
 '''
 import os
-import platform
-import sys
-import re
-import numpy as np
-import requests
-from tqdm import tqdm
-from bs4 import BeautifulSoup
+# import platform
+# import sys
+# import re
+# import numpy as np
+# import requests
+# from bs4 import BeautifulSoup
 
-URL_LOGIN = 'https://urs.earthdata.nasa.gov/home'
-
+# URL_LOGIN = 'https://urs.earthdata.nasa.gov/home'
 # URL_ROOT = 'https://e4ftl01.cr.usgs.gov/'
-URL_ROOT = ' https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/'
+# URL_ROOT = 'https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/'
+# URL_ROOT = 'https://search.earthdata.nasa.gov/search'
 
-from lb_toolkits import bin
-exedir = os.path.abspath(list(bin.__path__)[0])
+from .cmr import cmr
 
-WGET = os.path.join(exedir, 'wget.exe')
-if not os.path.isfile(WGET) :
-    raise Exception('wget is not command')
 
-class downloadMODIS():
+
+class downloadMODIS(cmr):
 
     def __init__(self, username, password):
 
         self.username = username
         self.password = password
+        self.token = self.get_tokens(username, password)
 
-        self.session = requests.Session()
-        # self.login(username, password)
-
-    def login(self, username, password):
-        """Login to Earth Explorer."""
-        rsp = self.session.get(URL_LOGIN)
-
-        token = self.get_tokens(rsp.text)
-        # payload= {
-        #     "commit": "Sign in",
-        #     "utf8":"✓",
-        #     "authenticity_token":token,
-        #     "login":username,
-        #     "password":password
-        # }
-        payload= {
-            "action": "login",
-            "authenticity_token":token,
-            "username":username,
-            "password":password
-        }
-        rsp = self.session.post(URL_LOGIN, data=payload, allow_redirects=True)
-
-        self.cookie = rsp.cookies.get_dict()
-        return rsp
-
-    def get_tokens(self, html):
+    def searchfile(self, starttime, endtime=None, satid='MODIS',
+                   prodversion='MOD021KM', Provider='LAADS',
+                   version='6.1', pattern='.hdf'):
         '''
-        处理登录后页面的html
-        :param html:
-        :return: 获取csrftoken
-        '''
-        soup = BeautifulSoup(html,'lxml')
-        res = soup.find("input",attrs={"name":"authenticity_token"})
-        token = res["value"]
-        return token
+        利用cmr进行查询检索相关产品的下载地址
 
-    def searchfile(self, nowdate, satid='TERRA', instid='MODIS',
-                         version='61', prodid='MOD06_L2'):
+        Parameters
+        ----------
+        starttime : datetime
+            起始时间
+        endtime : datetime, optional
+            起始时间
+        satid : str, optional
+            卫星名
+        prodversion : str
+            对应cmr中的short name
+        Provider : str, optional
+            产品提供的组织结构
+        pattern : str or list
+            预留接口，对文件名进行模糊匹配（未实现改功能）
+        Returns
+        -------
+            list
+            根据条件所匹配到的产品下载链接
         '''
 
-        :param nowdate:
-        :return:
-        '''
+        CMR_ProviderURL = 'https://cmr.earthdata.nasa.gov/search/site/' \
+                          'collections/directory/{Provider}/gov.nasa.eosdis'.format(Provider=Provider)
 
-        url = os.path.join(URL_ROOT, version, prodid,
-                           nowdate.strftime('%Y'), '%03d.json' %(int(nowdate.strftime('%j'))))
-        url = url.replace('\\', '/')
+        if not self.cmr_check_provider(shortname=prodversion) :
+            raise Exception('请参考Short Name>>"%s"' %(CMR_ProviderURL))
 
-        res = self.session.get(url)
-        for name in res.json() :
-            print(name.get("name"))
-        exit()
+        if endtime is None :
+            endtime = starttime
 
-        res = self.session.get(url)
-
-        soup = BeautifulSoup(res.text, 'lxml')
-        r = soup.find_all(href=re.compile('.h5'))
-        filelist = []
-        for name in r :
-            if name.get_text().endswith('.h5') :
-                filelist.append(url + '/' + name.get_text())
-        # print(filelist)
-
+        filelist = self.cmr_search(starttime=starttime, endtime=endtime,
+                                   short_name=prodversion, version=version)
         return filelist
 
-    def download(self, output_dir, url, timeout=5*60, skip=False):
+    def download(self, outdir, url, timeout=5 * 60, skip=False):
+        '''
+        根据输入url下载相应的文件
 
-        os.makedirs(output_dir, exist_ok=True)
+        Parameters
+        ----------
+        outdir: str
+            输出路径
+        url : str
+            下载链接
+        token : str
+            EarthData账号的APP Keys
+        timeout : int
+            时间限制
+        skip : bool
+            是否不做数据下载，直接返回文件名。默认是FALSE，下载文件。
+        Returns
+        -------
+            str
+            下载数据的文件名
+        '''
 
-        filename = self._download(output_dir, url, timeout=timeout, skip=skip)
+        if not os.path.isdir(outdir) :
+            os.makedirs(outdir, exist_ok=True)
+
+        filename = self.cmr_download(outdir, url, token=self.token,
+                                     username=self.username, password=self.password,
+                                     timeout=timeout, skip=skip)
 
         return filename
 
-    def _download(self, output_dir, url, timeout, chunk_size=1024, skip=False):
-        local_filename = os.path.basename(url)
-        local_filename = os.path.join(output_dir, local_filename)
-        if skip :
-            return local_filename
 
-        if platform.system().lower() == 'windows' :
-            cmd = f'{WGET} {url} --tries=3 ' \
-                  f'--http-user={self.username} ' \
-                  f'--http-passwd={self.password} ' \
-                  f'--timeout={timeout}' \
-                  f'  -P {output_dir}'
-        else:
-            cmd = f'wget {url} --tries=3 ' \
-                  f'--http-user={self.username} ' \
-                  f'--http-passwd={self.password} ' \
-                  f'--timeout={timeout}' \
-                  f'  -P {output_dir}'
-        print('Command : [%s]' %(cmd))
-        os.system(cmd)
-
-        return local_filename
-
-#
-# class downpy() :
-#     #!/usr/bin/env python
-#
-#     # script supports either python2 or python3
-#     #
-#     # Attempts to do HTTP Gets with urllib2(py2) urllib.requets(py3) or subprocess
-#     # if tlsv1.1+ isn't supported by the python ssl module
-#     #
-#     # Will download csv or json depending on which python module is available
-#     #
-#
-#     from __future__ import (division, print_function, absolute_import, unicode_literals)
-#
-#     import argparse
-#     import os
-#     import os.path
-#     import shutil
-#     import sys
-#
-#     try:
-#         from StringIO import StringIO   # python2
-#     except ImportError:
-#         from io import StringIO         # python3
-#
-#
-#     ################################################################################
-#
-#
-#     USERAGENT = 'tis/download.py_1.0--' + sys.version.replace('\n','').replace('\r','')
-#
-#
-#     def geturl(url, token=None, out=None):
-#         headers = { 'user-agent' : USERAGENT }
-#         if not token is None:
-#             headers['Authorization'] = 'Bearer ' + token
-#         try:
-#             import ssl
-#             CTX = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-#             if sys.version_info.major == 2:
-#                 import urllib2
-#                 try:
-#                     fh = urllib2.urlopen(urllib2.Request(url, headers=headers), context=CTX)
-#                     if out is None:
-#                         return fh.read()
-#                     else:
-#                         shutil.copyfileobj(fh, out)
-#                 except urllib2.HTTPError as e:
-#                     print('HTTP GET error code: %d' % e.code(), file=sys.stderr)
-#                     print('HTTP GET error message: %s' % e.message, file=sys.stderr)
-#                 except urllib2.URLError as e:
-#                     print('Failed to make request: %s' % e.reason, file=sys.stderr)
-#                 return None
-#
-#             else:
-#                 from urllib.request import urlopen, Request, URLError, HTTPError
-#                 try:
-#                     fh = urlopen(Request(url, headers=headers), context=CTX)
-#                     if out is None:
-#                         return fh.read().decode('utf-8')
-#                     else:
-#                         shutil.copyfileobj(fh, out)
-#                 except HTTPError as e:
-#                     print('HTTP GET error code: %d' % e.code(), file=sys.stderr)
-#                     print('HTTP GET error message: %s' % e.message, file=sys.stderr)
-#                 except URLError as e:
-#                     print('Failed to make request: %s' % e.reason, file=sys.stderr)
-#                 return None
-#
-#         except AttributeError:
-#             # OS X Python 2 and 3 don't support tlsv1.1+ therefore... curl
-#             import subprocess
-#             try:
-#                 args = ['curl', '--fail', '-sS', '-L', '--get', url]
-#                 for (k,v) in headers.items():
-#                     args.extend(['-H', ': '.join([k, v])])
-#                 if out is None:
-#                     # python3's subprocess.check_output returns stdout as a byte string
-#                     result = subprocess.check_output(args)
-#                     return result.decode('utf-8') if isinstance(result, bytes) else result
-#                 else:
-#                     subprocess.call(args, stdout=out)
-#             except subprocess.CalledProcessError as e:
-#                 print('curl GET error message: %' + (e.message if hasattr(e, 'message') else e.output), file=sys.stderr)
-#             return None
-#
-#
-#
-#     ################################################################################
-#
-#
-#     DESC = "This script will recursively download all files if they don't exist from a LAADS URL and stores them to the specified path"
-#
-#
-#     def sync(src, dest, tok):
-#         '''synchronize src url with dest directory'''
-#         try:
-#             import csv
-#             files = [ f for f in csv.DictReader(StringIO(geturl('%s.csv' % src, tok)), skipinitialspace=True) ]
-#         except ImportError:
-#             import json
-#             files = json.loads(geturl(src + '.json', tok))
-#
-#         # use os.path since python 2/3 both support it while pathlib is 3.4+
-#         for f in files:
-#             # currently we use filesize of 0 to indicate directory
-#             filesize = int(f['size'])
-#             path = os.path.join(dest, f['name'])
-#             url = src + '/' + f['name']
-#             if filesize == 0:
-#                 try:
-#                     print('creating dir:', path)
-#                     os.mkdir(path)
-#                     sync(src + '/' + f['name'], path, tok)
-#                 except IOError as e:
-#                     print("mkdir `%s': %s" % (e.filename, e.strerror), file=sys.stderr)
-#                     sys.exit(-1)
-#             else:
-#                 try:
-#                     if not os.path.exists(path):
-#                         print('downloading: ' , path)
-#                         with open(path, 'w+b') as fh:
-#                             geturl(url, tok, fh)
-#                     else:
-#                         print('skipping: ', path)
-#                 except IOError as e:
-#                     print("open `%s': %s" % (e.filename, e.strerror), file=sys.stderr)
-#                     sys.exit(-1)
-#         return 0
-#
-#
-#     def _main(argv):
-#         parser = argparse.ArgumentParser(prog=argv[0], description=DESC)
-#         parser.add_argument('-s', '--source', dest='source', metavar='URL', help='Recursively download files at URL', required=True)
-#         parser.add_argument('-d', '--destination', dest='destination', metavar='DIR', help='Store directory structure in DIR', required=True)
-#         parser.add_argument('-t', '--token', dest='token', metavar='TOK', help='Use app token TOK to authenticate', required=True)
-#         args = parser.parse_args(argv[1:])
-#         if not os.path.exists(args.destination):
-#             os.makedirs(args.destination)
-#         return sync(args.source, args.destination, args.token)
-#
-#
-#     if __name__ == '__main__':
-#         try:
-#             sys.exit(_main(sys.argv))
-#         except KeyboardInterrupt:
-#             sys.exit(-1)
-#
-
-
-
-
-
-
-
+    # def searchfile(self, starttime, endtime=None, satid='TERRA', instid='MODIS',
+    #                prodID='MYD021KM', version='6', pattern='.hdf'):
+    #     '''
+    #     MODIS产品相关信息请参考：
+    #         ## https://e4ftl01.cr.usgs.gov/
+    #
+    #         ## https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/
+    #
+    #         ## https://search.earthdata.nasa.gov/search
+    #
+    #     Parameters
+    #     ----------
+    #     starttime : datetime,
+    #         起始时间
+    #     endtime : datetime, optional
+    #         结束时间
+    #     satid : str
+    #         卫星
+    #     instid : str
+    #         载荷
+    #     prodID : str
+    #         产品标识
+    #     version : str
+    #         产品所属版本
+    #     Returns
+    #     -------
+    #         list
+    #         匹配到文件链接
+    #     '''
+    #
+    #     if endtime is None :
+    #         endtime = starttime
+    #
+    #     filelist = self.search( starttime=starttime, endtime=endtime,
+    #                             short_name=prodID, version=version, pattern=pattern)
+    #
+    #     if len(filelist) == 0 :
+    #         print('请参考Short Name>>\n\thttps://cmr.earthdata.nasa.gov/search/site/collections/directory/LAADS/gov.nasa.eosdis'
+    #                         '\n\thttps://cmr.earthdata.nasa.gov/search/site/collections/directory/LANCEMODIS/gov.nasa.eosdis'
+    #                         '\n\https://cmr.earthdata.nasa.gov/search/site/collections/directory/eosdis')
+    #
+    #
+    #     return filelist

@@ -31,8 +31,10 @@ from lb_toolkits.tools import readjson
 
 from urllib.request import urlopen, Request
 
-from .config import WGET, CMR_URL
+from .config import WGET
 
+CMR_URL = 'https://cmr.earthdata.nasa.gov'
+URS_URL = 'https://urs.earthdata.nasa.gov'
 
 class cmr() :
 
@@ -361,7 +363,7 @@ class cmr() :
                   f'-e robots=off -c -np -R .html,.tmp -nH --cut-dirs=10 {url} ' \
                   f'--header "Authorization: Bearer {token}" -O {tempfile}'
         else:
-            cmd = f'{WGET} --tries={tries} --no-check-certificate ' \
+            cmd = f'wget --tries={tries} --no-check-certificate ' \
                   f'-e robots=off -c -np -R .html,.tmp -nH --cut-dirs=10 {url} ' \
                   f'--header "Authorization: Bearer {token}" -O {tempfile}'
 

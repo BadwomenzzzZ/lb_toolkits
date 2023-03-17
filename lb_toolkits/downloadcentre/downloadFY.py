@@ -1,13 +1,17 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : downloadFY.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/7/31 22:35      Lee       1.0         
-@Description
-------------------------------------
- 
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+
 '''
 import os
 import sys
@@ -17,8 +21,9 @@ import datetime
 
 
 from lb_toolkits.tools import ftppro
+from lb_toolkits.tools import spiderdownload
 
-ftphost = 'ftp.nsmc.org.cn'
+from .config import FY_FTP_URL
 
 FYProdInfo = {
     'FY4A' : {
@@ -40,10 +45,21 @@ FYProdInfo = {
 
 class downloadFY(object):
 
-    def __init__(self, username, password):
+    def __init__(self, username=None, password=None):
+        '''
+        支持下载FY3D、FY4A、FY4B的L1、L2级数据产品
 
-        self.ftp = ftppro(ftphost, username, password)
-        self.connect()
+        Parameters
+        ----------
+        username: str
+            用户名
+        password: str
+            密码
+        '''
+        if username is not None and password is not None :
+            self.ftp = ftppro(FY_FTP_URL, username, password)
+            self.connect()
+
         self.dstfilelist = []
 
     def connect(self):
@@ -53,22 +69,101 @@ class downloadFY(object):
         except BaseException :
             raise Exception('登录失败，请连接并进行FTP账号注册。http://fy4.nsmc.org.cn/data/en/data/realtime.html')
 
+    def download_fy_order(self, outdir, orderfile=None, orderID=None, skip=False, cover=False):
+        '''
+        根据在风云官网提交的订单号或者订单文件信息，
+        对风云卫星数据进行下载
+
+        Parameters
+        ----------
+        outdir : str
+        orderfile : str
+        orderID : str
+        skip : bool
+            是否跳过下载，默认为TRUE
+            文件存在，如果skip为TRUE，就跳过该文件下载，
+            如果skip为FALSE，则删除原文件后重新下载
+
+        Returns
+        -------
+
+        '''
+        if orderID is not None :
+            orderurl = 'http://file.nsmc.org.cn/ORDERFILELIST/{orderid}.txt'.format(orderid=orderID)
+            spider = spiderdownload()
+            orderfile = spider.download(outdir, orderurl)
+
+        dict_order = self.readorderfile(orderfile)
+        user = None
+        passwd = None
+        host = None
+        for key in dict_order :
+            dict_info = dict_order[key]
+            # print(dict_info)
+
+            if 'user' not in dict_info :
+                continue
+            if 'passwd' not in dict_info :
+                continue
+            if 'host' not in dict_info :
+                continue
+            if 'filepath' not in dict_info :
+                continue
+
+            if user is None or passwd is None or host is None :
+                user = dict_info['user']
+                passwd = dict_info['passwd']
+                host = dict_info['host']
+
+                mc = ftppro(host, user=user, password=passwd)
+
+            if user != dict_info['user'] or passwd != dict_info['passwd'] or host != dict_info['host'] :
+                print('将切换账号：【%s】-->【%s】' %(user, dict_info['user']))
+                user = dict_info['user']
+                passwd = dict_info['passwd']
+                host = dict_info['host']
+
+                del mc
+                mc = ftppro(host, user=user, password=passwd)
+
+
+            mc.downloadFile(dict_info['filepath'], outdir, skip=skip, cover=cover)
 
     def download_fy_l1(self, dstpath, starttime, endtime=None, satid='FY4A',
                    instid='AGRI', regionid='DISK',resolution=0.04,
-                   geoflag=False, pattern=None, skip=False):
+                   geoflag=False, pattern=None, skip=False, cover=False):
         '''
         下载FY3D MERSI、FY4A AGRI、GIITS、LMI L1数据文件
-        :param starttime: datetime, 数据下载时间(UTC)
-        :param dstpath: 下载存储路径
-        :param satid: 卫星名, FY3D/FY4A/FY4B
-        :param instid: 载荷名 MERSI/AGRI/GIIRS/LMI
-        :param regionid: 观测区域，DISK/REGC
-        :param resolution: float, degree，数据分辨率
-        :param geoflag: bool, default False,是否需要
-                        下载对应时间的GEO文件，默认是不下载，
-                        如果需要下载对应的GEO，需要将geoflag=True
-        :return:
+
+        Parameters
+        ----------
+        dstpath: str
+            下载存储路径
+        starttime: datetime
+            数据下载时间(UTC)
+        endtime: datetime
+            数据下载时间(UTC)
+        satid: str
+            卫星名, FY3D/FY4A/FY4B
+        instid: str
+            载荷名 MERSI/AGRI/GIIRS/LMI
+        regionid: str
+            观测区域，DISK/REGC
+        resolution: float
+            degree，数据分辨率
+        geoflag : bool
+            default False,是否需要
+            下载对应时间的GEO文件，默认是不下载，
+            如果需要下载对应的GEO，需要将geoflag=True
+        pattern: str
+            模糊匹配条件
+        skip: bool
+            默认为False。如果为True，则跳过下载，直接返回文件名
+
+        Returns
+        -------
+        list
+        下载文件名列表
         '''
 
         # /FY4A/AGRI/L1/FDI/DISK/4000M/2022/20220609
@@ -77,7 +172,6 @@ class downloadFY(object):
         if endtime is None :
             endtime = starttime
 
-        L1FileList = []
         # 拼接目录
         if satid in ['FY4A'] :
             L1FileList = self._PathForFY4AL1(starttime, endtime,
@@ -96,26 +190,43 @@ class downloadFY(object):
             raise Exception('暂不支持【%s / %s】L1数据下载' %(satid, instid))
 
 
-        if skip :
-            return L1FileList
-        else:
-            self.download(dstpath, L1FileList)
-            return L1FileList
+        return self.download(dstpath, L1FileList, skip=skip, cover=cover)
+
 
 
     def download_fy_l2(self, dstpath, starttime, endtime=None,
                        satid='FY4A', instid='AGRI', prodid='CLM',
-                       regionid='DISK',resolution=0.04,
-                       pattern=None, skip=False):
+                       regionid='DISK', resolution=0.04,
+                       pattern=None, skip=False, cover=False):
         '''
         下载FY3D MERSI、FY4A AGRI、GIITS、LMI L1数据文件
-        :param starttime: datetime, 数据下载时间(UTC)
-        :param dstpath: 下载存储路径
-        :param satid: 卫星名, FY3D/FY4A/FY4B
-        :param instid: 载荷名 MERSI/AGRI/GIIRS/LMI
-        :param regionid: 观测区域，DISK/REGC
-        :param resolution: float, degree，数据分辨率
-        :return:
+
+        Parameters
+        ----------
+        dstpath: str
+            下载存储路径
+        starttime: datetime
+            数据下载时间(UTC)
+        endtime: datetime, optional
+            数据下载时间(UTC)
+        satid: str
+            卫星名, FY3D/FY4A/FY4B
+        instid: str
+            载荷名 MERSI/AGRI/GIIRS/LMI
+        prodid: str
+            观测区域，DISK/REGC
+        regionid: str
+            观测区域，DISK/REGC
+        resolution: float, optional
+            degree，数据分辨率
+        pattern: str, optional
+        skip: bool
+            默认为False。如果为True，则跳过下载，直接返回文件名
+
+        Returns
+        -------
+        list
+        下载文件名列表
         '''
 
         if endtime is None :
@@ -144,9 +255,8 @@ class downloadFY(object):
         if skip :
             return L2FileList
         else:
-            self.download(dstpath, L2FileList)
+            self.download(dstpath, L2FileList, cover=cover)
             return L2FileList
-
 
 
     def _PathForFY4AL1(self, starttime, endtime,
@@ -175,14 +285,14 @@ class downloadFY(object):
             else:
                 raise Exception('只支持下载FY4A AGRI和GIIRS L1近实时数据')
 
-            files = self.GetFileList(L1Path,
+            files = self.getFileList(L1Path,
                                      pattern='*%s*%s*' %(nowdate.strftime('%Y%m%d%H'), strRes))
-            matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+            matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             if geoflag :
-                files = self.GetFileList(GeoPath,
+                files = self.getFileList(GeoPath,
                                          pattern='*%s*%s*' %(nowdate.strftime('%Y%m%d%H'), strRes))
-                matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+                matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             nowdate += datetime.timedelta(hours=1)
 
@@ -209,9 +319,9 @@ class downloadFY(object):
             else:
                 raise Exception('只支持下载FY4A AGRI和GIIRS L2近实时数据')
 
-            files = self.GetFileList(L1Path,
+            files = self.getFileList(L1Path,
                                      pattern='*%s*' %(nowdate.strftime('%Y%m%d%H')))
-            matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+            matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             nowdate += datetime.timedelta(hours=1)
 
@@ -238,9 +348,9 @@ class downloadFY(object):
             else:
                 raise Exception('只支持下载FY4B AGRI L2近实时数据')
 
-            files = self.GetFileList(L1Path,
+            files = self.getFileList(L1Path,
                                      pattern='*%s*' %(nowdate.strftime('%Y%m%d%H')))
-            matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+            matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             nowdate += datetime.timedelta(hours=1)
 
@@ -263,18 +373,79 @@ class downloadFY(object):
             else:
                 raise Exception('只支持下载FY3D MERSI L1 近实时数据')
 
-            files = self.GetFileList(L1Path,
+            files = self.getFileList(L1Path,
                                      pattern='*%s*%s*' %(nowdate.strftime('%Y%m%d_%H'), strRes))
-            matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+            matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             if geoflag :
-                files = self.GetFileList(GeoPath,
-                                         pattern='*%s*%s*' %(nowdate.strftime('%Y%m%d_%H'), strRes))
-                matchfiles = self._checktime(matchfiles, starttime, endtime, files)
+                if strRes in ['250M'] :
+                    geoRes = 'GEOQK'
+                elif strRes in ['1000M'] :
+                    geoRes = 'GEO1K'
+
+                files = self.getFileList(GeoPath,
+                                         pattern='*%s*%s*' %(nowdate.strftime('%Y%m%d_%H'), geoRes))
+                matchfiles = self._checktime(matchfiles, starttime, endtime, files, satid)
 
             nowdate += datetime.timedelta(hours=1)
 
         return matchfiles
+
+
+    def readorderfile(self, filename):
+        dict_order = {}
+        if not os.path.isfile(filename) :
+            raise Exception('订单信息文件不存在【%s】' %(filename))
+            return dict_order
+
+        with open(filename, 'r', encoding='gbk') as fp :
+            lines = fp.readlines()
+
+        count = 0
+        for line in lines :
+            if len(line) <= 10 :
+                continue
+
+            dict_info = self._spliturl(line)
+            if not 'filepath' in dict_info :
+                continue
+
+            dict_order['%d' %(count)] = dict_info
+
+            count+=1
+
+        print('共获取到【%d】个文件下载ID' %(count))
+
+        return dict_order
+
+    def _spliturl(self, url):
+        url = url.replace('\n','')
+        if 'ftp://' in url :
+            try:
+                url = url.replace('ftp://', '')
+                user = url.split(':')[0]
+
+                index_usr = url.index(':')
+                index_pwd = url.index('@')
+                index_host = url.index('.cn')
+
+                user = url[:index_usr]
+                passwd = url[index_usr+1:index_pwd]
+                host = url[index_pwd+1:index_host+3]
+                filepath = url[index_host+3:]
+
+                return {
+                    'user' : user,
+                    'passwd' : passwd,
+                    'host' : host,
+                    'filepath' : filepath,
+                }
+            except BaseException as e :
+                return {}
+        else:
+            return {}
+
+
 
     # def _PathForFY3DMERSIL2(self, starttime, endtime,
     #                         satid='FY3D', instid='MERSI',
@@ -303,7 +474,7 @@ class downloadFY(object):
     #
     #     return matchfiles
 
-    def download(self, dstpath, filelist):
+    def download(self, dstpath, filelist, skip=False, cover=False):
         '''
         下载数据文件
         :param dstpath:
@@ -311,62 +482,70 @@ class downloadFY(object):
         :return:
         '''
 
-
         if not os.path.exists(dstpath):
             os.makedirs(dstpath)
-            print('create dir <{0}> success !'.format(dstpath))
+            print('成功创建路径【%s】' %(dstpath))
 
-        # if okpath is not  None :
-        #     if not os.path.exists(okpath) :
-        #         os.makedirs(okpath)
-        #         print('create dir <{0}> success !'.format(okpath))
-
+        count = len(filelist)
         for srcname in filelist:
             print('='*100)
+            count -= 1
             file = os.path.basename(srcname)
             dstname = os.path.join(dstpath, file)
-            # if okpath is None :
-            #     okname = dstname + '.ok'
-            # else:
-            #     okname = os.path.join(okpath, file + '.OK')
 
             self.dstfilelist.append(dstname)
-            # if os.path.isfile(okname) and os.path.isfile(dstname) :
-            #     print('%s is exist, will continue...' %(dstname))
-            #     continue
-
-            downinfo = {}
-
-            downinfo['srcname'] = srcname
-            downinfo['dstname'] = dstname
-            # downinfo['okname'] = okname
-
+            if skip :
+                continue
             stime = time.time()
-            print(datetime.datetime.utcnow().strftime('【%Y-%m-%d %H:%M:%S(UTC)】'), 'download file : ', srcname)
+            print(datetime.datetime.utcnow().strftime('【%Y-%m-%d %H:%M:%S(UTC)】'),
+                  '开始下载文件【%d】:【%s】' %(count, srcname))
 
-            downinfo['starttime'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            if self.ftp.downloadFile(srcname, dstpath):
-                downinfo['endtime'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                downinfo['status'] = 0
-                # self.writeok(okname, downinfo)
-                print('download %s success...' %(dstname))
+            if self.ftp.downloadFile(srcname, dstpath, cover=cover):
+
+                print(datetime.datetime.utcnow().strftime('【%Y-%m-%d %H:%M:%S(UTC)】'),
+                      '成功下载文件【%d】:【%s】' %(count, dstname))
 
             etime = time.time()
             print('cost %.2f sec...' %(etime - stime))
 
+        return self.dstfilelist
+
     def listDir(self, path, pattern=None):
         '''
         列出远程路径下的文件或者文件夹
-        :param path: 远程路径
-        :return: list
+        Parameters
+        ----------
+        path: str
+            远程路径
+        pattern: str
+            模糊匹配字段
+
+        Returns
+        -------
+        list
+        返回远程路径下的文件或文件夹
         '''
+
         files = self.ftp.listdir(path, pattern)
         files.sort()
 
         return files
 
-    def GetFileList(self, srcpath, pattern=None):
+    def getFileList(self, srcpath, pattern=None):
+        '''
+        获取下载文件列表
+        Parameters
+        ----------
+        srcpath: str
+            远程路径
+        pattern : str
+            模糊匹配参数
 
+        Returns
+        -------
+        list
+        所需下载的远程文件列表
+        '''
         downfiles = []
 
         srcpath = srcpath.replace('\\', '/')
@@ -397,7 +576,7 @@ class downloadFY(object):
 
         return downfiles
 
-    def _checktime(self, matchfiles, starttime, endtime, files, pattern=None):
+    def _checktime(self, matchfiles, starttime, endtime, files, satid, pattern=None):
         '''
         通过起始结束时间匹配满足条件的文件名
         :param matchfiles:
@@ -407,8 +586,38 @@ class downloadFY(object):
         :param pattern:
         :return:
         '''
+
+
+
         for file in files :
-            matchfiles.append(file)
+            if 'FY4' in satid :
+                basename = os.path.basename(file)
+                namelist = basename.split('_')
+                for item in namelist :
+                    if starttime.strftime('%Y%m%d') in item :
+                        if len(item) == 14 :
+                            nowdate = datetime.datetime.strptime(item, '%Y%m%d%H%M%S')
+                            if (nowdate >= starttime) and (nowdate <= endtime) :
+                                matchfiles.append(file)
+                                break
+                        elif len(item) == 8 :
+                            nowdate = datetime.datetime.strptime(item, '%Y%m%d')
+                            if (nowdate >= starttime) and (nowdate <= endtime) :
+                                matchfiles.append(file)
+                                break
+            elif 'FY3' in satid :
+                basename = os.path.basename(file)
+                namelist = basename.split('_')
+                for i in range(len(namelist)) :
+                    item = namelist[i]
+                    if starttime.strftime('%Y%m%d') in item :
+                        if len(item) == 8 and len(namelist[i+1]) == 4 :
+                            nowdate = datetime.datetime.strptime('%s_%s' %(item, namelist[i+1]),
+                                                                 '%Y%m%d_%H%M')
+                            if (nowdate >= starttime) and (nowdate <= endtime) :
+                                matchfiles.append(file)
+                                break
+
 
         return matchfiles
 

@@ -93,7 +93,7 @@ class EarthExplorer(object):
             if error_msg:
                 raise EarthExplorerError(error_msg)
             download_url = r.json().get("url")
-
+        print('下载地址>>"%s"' %(download_url))
         try:
             with self.session.get(
                 download_url, stream=True, allow_redirects=True, timeout=timeout

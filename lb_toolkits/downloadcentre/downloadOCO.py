@@ -1,158 +1,144 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : downloadOCO.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/8/11 15:34      Lee       1.0         
-@Description
-------------------------------------
- 
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+
 '''
+import datetime
 import os
 import platform
 import sys
+import re
 import numpy as np
 import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup
+import shutil
 
-LOGIN_URL = 'https://urs.earthdata.nasa.gov/home'
+# LOGIN_URL = 'https://urs.earthdata.nasa.gov/home'
+#
+# URL_ROOT = 'https://oco2.gesdisc.eosdis.nasa.gov/data'
 
-URL_ROOT = 'https://oco2.gesdisc.eosdis.nasa.gov/data'
 
+from .cmr import cmr
+from .config import WGET
 
-from lb_toolkits import bin
-exedir = os.path.abspath(list(bin.__path__)[0])
-
-# WGET = os.path.join(exedir, 'wget.exe')
-# if not os.path.isfile(WGET) :
-#     raise Exception('wget is not command')
-
-class downloadOCO():
+class downloadOCO(cmr):
 
     def __init__(self, username, password):
 
         self.username = username
         self.password = password
 
-        self.session = requests.Session()
-        # self.login(username, password)
-
-    def login(self, username, password):
-        """Login to Earth Explorer."""
-        rsp = self.session.get(LOGIN_URL)
-
-        token = self.get_tokens(rsp.text)
-        # payload= {
-        #     "commit": "Sign in",
-        #     "utf8":"✓",
-        #     "authenticity_token":token,
-        #     "login":username,
-        #     "password":password
-        # }
-        payload= {
-            "action": "login",
-            "authenticity_token":token,
-            "username":username,
-            "password":password
-        }
-        rsp = self.session.post(LOGIN_URL, data=payload, allow_redirects=True)
-
-        self.cookie = rsp.cookies.get_dict()
-        return rsp
-
-    def get_tokens(self, html):
+    def searchfile(self, starttime, endtime=None, satid='OCO2_DATA',
+                   prodversion='OCO2_L2_Standard.10r', Provider='LARC_ASDC', pattern='.h5', **kwargs):
         '''
-        处理登录后页面的html
-        :param html:
-        :return: 获取csrftoken
-        '''
-        soup = BeautifulSoup(html,'lxml')
-        res = soup.find("input",attrs={"name":"authenticity_token"})
-        token = res["value"]
-        return token
+        利用cmr进行查询检索相关产品的下载地址
 
-    def searchfile(self, nowdate, satid='OCO2_DATA', prodversion='OCO2_L2_Standard.10r'):
+        Parameters
+        ----------
+        starttime : datetime
+            起始时间
+        endtime : datetime, optional
+            起始时间
+        satid : str, optional
+            卫星名
+        prodversion : str
+            对应cmr中的short name
+        Provider : str, optional
+            产品提供的组织结构
+        pattern : str or list
+            预留接口，对文件名进行模糊匹配（未实现改功能）
+        Returns
+        -------
+            list
+            根据条件所匹配到的产品下载链接
         '''
 
-        :param nowdate:
-        :return:
-        '''
-        import re
-        # https://oco2.gesdisc.eosdis.nasa.gov/data/OCO2_DATA/OCO2_L2_Standard.10r/2022/059/
-        url = os.path.join(URL_ROOT, satid, prodversion,
-                           nowdate.strftime('%Y'), nowdate.strftime('%j'))
-        url = url.replace('\\', '/')
+        if endtime is None :
+            endtime = starttime
 
-        res = self.session.get(url)
+        CMR_ProviderURL = 'https://cmr.earthdata.nasa.gov/search/site/' \
+                          'collections/directory/{Provider}/gov.nasa.eosdis'.format(Provider=Provider)
 
-        soup = BeautifulSoup(res.text, 'lxml')
-        r = soup.find_all(href=re.compile('.h5'))
-        filelist = []
-        for name in r :
-            if name.get_text().endswith('.h5') :
-                filelist.append(url + '/' + name.get_text())
-        # print(filelist)
+        if not self.cmr_check_provider(shortname=prodversion) :
+            raise Exception('请参考Short Name>>"%s"' %(CMR_ProviderURL))
+
+        # 调用cmr进行产品查询
+        filelist = self.cmr_search(starttime=starttime, endtime=endtime,
+                                   short_name=prodversion, **kwargs)
 
         return filelist
 
-    def download(self, output_dir, url, timeout=5*60, skip=False):
+    def download(self, outdir, url, timeout=5 * 60, skip=False):
+        '''
+        根据输入url下载相应的文件
 
-        os.makedirs(output_dir, exist_ok=True)
+        Parameters
+        ----------
+        outdir: str
+            输出路径
+        url : str
+            下载链接
+        token : str
+            EarthData账号的APP Keys
+        timeout : int
+            时间限制
+        skip : bool
+            是否不做数据下载，直接返回文件名。默认是FALSE，下载文件。
+        Returns
+        -------
+            str
+            下载数据的文件名
+        '''
 
-        filename = self._download(output_dir, url, timeout=timeout, skip=skip)
+        if not  os.path.isdir(outdir) :
+            os.makedirs(outdir, exist_ok=True)
+
+        filename = self._download(outdir, url, timeout=timeout, skip=skip)
 
         return filename
 
-    def _download(self, output_dir, url, timeout, chunk_size=1024, skip=False):
+    def _download(self, outdir, url, timeout, chunk_size=1024, skip=False):
         local_filename = os.path.basename(url)
-        local_filename = os.path.join(output_dir, local_filename)
+        local_filename = os.path.join(outdir, local_filename)
         if skip :
             return local_filename
 
+        if os.path.isfile(local_filename) :
+            return local_filename
+
+        tempfile = local_filename + '.download'
+
         if platform.system().lower() == 'windows' :
-            cmd = f'{WGET} {url} --tries=3 ' \
+            cmd = f'{WGET} {url} -c --tries=3 ' \
                   f'--http-user={self.username} ' \
                   f'--http-passwd={self.password} ' \
                   f'--timeout={timeout}' \
-                  f'  -P {output_dir}'
+                  f'  -O {tempfile}'
         else:
-            cmd = f'wget {url} --tries=3 ' \
+            cmd = f'wget {url}  -c --tries=3 ' \
                   f'--http-user={self.username} ' \
                   f'--http-passwd={self.password} ' \
                   f'--timeout={timeout}' \
-                  f'  -P {output_dir}'
-        print('Command : [%s]' %(cmd))
+                  f'  -O {tempfile}'
+        print('执行下载命令: 【%s】' %(cmd))
         os.system(cmd)
 
-        return local_filename
+        if os.path.isfile(local_filename) :
+            os.remove(local_filename)
 
-        #  暂未实现爬虫方式下载，只能通过wget方式下载文件
-        download_url = url
-        try:
-            with self.session.get(
-                    download_url, stream=True, allow_redirects=True, timeout=timeout
-            ) as r:
-                headers = r.headers
-
-                file_size = int(r.headers.get("Content-Length"))
-                with tqdm(
-                        total=file_size, unit_scale=True, unit="B", unit_divisor=1024
-                ) as pbar:
-                    local_filename = os.path.basename(download_url)
-                    local_filename = os.path.join(output_dir, local_filename)
-                    if skip:
-                        return local_filename
-                    with open(local_filename, "wb") as f:
-                        for chunk in r.iter_content(chunk_size=chunk_size):
-                            if chunk:
-                                f.write(chunk)
-                                pbar.update(chunk_size)
-        except requests.exceptions.Timeout:
-            raise Exception(
-                "Connection timeout after {} seconds.".format(timeout)
-            )
-        print('download 【%s】 success...' %(local_filename))
+        if os.path.isfile(tempfile) :
+            shutil.move(tempfile, local_filename)
 
         return local_filename
+

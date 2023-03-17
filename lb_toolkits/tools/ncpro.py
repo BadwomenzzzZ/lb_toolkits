@@ -1,10 +1,17 @@
-# coding:utf-8
+# -*- coding:utf-8 -*-
 '''
-@Project  : code
+@Project  : lb_toolkits
+
 @File     : ncpro.py
-@Modify Time      @Author    @Version    @Desciption
-------------      -------    --------    -----------
-2021/3/22 10:20   Lee        1.0
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+Netcdf4文件的读写操作
 
 '''
 import os
@@ -13,7 +20,7 @@ import numpy as np
 from netCDF4 import num2date, date2num
 
 def readnc(filename, sdsname, dictsdsinfo=None):
-
+    ''' 读取netcdf4 文件数据集和数据集属性 '''
     if not os.path.isfile(filename) :
         print('%s is not exist, please check it...' %(filename))
         if dictsdsinfo is None :
@@ -51,7 +58,7 @@ def readnc(filename, sdsname, dictsdsinfo=None):
         return data
 
 def readnc_fileinfo(filename) :
-
+    ''' 读取netcdf4 文件全局属性 '''
     dictfileinfo = {}
     if not os.path.isfile(filename) :
         print('%s is not exist, please check it...' %(filename))
@@ -69,7 +76,7 @@ def readnc_fileinfo(filename) :
             return dictfileinfo
 
 def readnc_sdsinfo(filename, sdsname) :
-
+    ''' 读取数据集属性信息 '''
     dictsdsinfo = {}
     if not os.path.isfile(filename) :
         print('%s is not exist, please check it...' %(filename))
@@ -91,6 +98,59 @@ def readnc_sdsinfo(filename, sdsname) :
             print(e)
             return dictsdsinfo
 
+
+def readncfortimes(filename, sdsname,
+                   units = 'hours since 1900-01-01 00:00:00.0',
+                   calendar = "gregorian"):
+    '''
+    读取时间维度数据集
+
+    Parameters
+    ----------
+    filename : str
+        文件名
+    sdsname : str
+        数据集名
+    units : str
+        时间单位，从什么时间开始计数
+    calendar : str
+
+    Returns
+    -------
+        numpy.array
+        时间维度数据集
+    '''
+
+    if not os.path.isfile(filename) :
+        print('%s is not exist, please check it...' %(filename))
+        return None
+    else:
+        try:
+            with netCDF4.Dataset(filename, 'r') as fp :
+                if not sdsname in fp.variables:
+                    print('%s is not a dataset in %s' % (sdsname, filename))
+                    return None
+                else:
+                    dsetid = fp.variables[sdsname]
+                    data = fp.variables[sdsname][:]
+
+                    if 'units' in dsetid.ncattrs() :
+                        units = dsetid.getncattr('units')
+
+                    if 'calendar' in dsetid.ncattrs() :
+                        calendar = dsetid.getncattr('calendar')
+
+                    data = num2date(data,units=units,calendar=calendar)
+
+                    return data
+
+        except BaseException as e :
+            print(e)
+            return None
+
+        return data
+
+
 def writenc(filename, sdsname, srcdata, dimension=None, overwrite=1,
             complevel=9, dictsdsinfo=None, fill_value=None,
             standard_name=None, long_name=None, description=None, units=None,
@@ -98,16 +158,35 @@ def writenc(filename, sdsname, srcdata, dimension=None, overwrite=1,
             scale_factor=None, add_offset=None, **kwargs):
     '''
     写NC文件
-    :param filename: 输出文件名
-    :param sdsname: 数据集名
-    :param srcdata: 数据
-    :param dimension: tuple, 关联维度名，
-    :param overwrite:
-    :param complevel:
-    :param dictfileinfo:
-    :param dictsdsinfo:
-    :return:
+
+    Parameters
+    ----------
+    filename : str
+    sdsname : str
+    srcdata : str
+    dimension : tuple
+        数据集关联的维度名
+    overwrite : int
+    complevel : int
+        压缩等级，0-9，值越大，压力等级越大
+    dictsdsinfo ：dict
+        数据集属性
+    fill_value  : int or float
+        填充值 或 无效值
+    standard_name
+    long_name
+    description
+    units
+    valid_range
+    scale_factor
+    add_offset
+    kwargs
+
+    Returns
+    -------
+
     '''
+
     data = np.array(srcdata)
 
     if (dictsdsinfo is None) or not isinstance(dictsdsinfo, dict) :
@@ -213,16 +292,27 @@ def writencfortimes(filename, sdsname, srcdata, overwrite=1,
                     complevel=9, dictsdsinfo=None):
     '''
     写时间维度数据集
-    :param filename:
-    :param sdsname: 数据集名
-    :param srcdata: datetime array
-    :param overwrite: 是否覆盖源文件
-    :param units: 时间单位，从什么时间开始计数
-    :param calendar:
-    :param complevel: 压缩
-    :param dictsdsinfo: 数据集属性
-    :return:
+
+    Parameters
+    ----------
+    filename : str
+    sdsname: str
+        datetime array
+    srcdata : datetime array
+
+    overwrite: int
+    units : str
+        时间单位，从什么时间开始计数
+    calendar : str
+    complevel : int
+    dictsdsinfo : dict
+        数据集属性
+
+    Returns
+    -------
+
     '''
+
     data = np.array(srcdata)
 
     if overwrite :

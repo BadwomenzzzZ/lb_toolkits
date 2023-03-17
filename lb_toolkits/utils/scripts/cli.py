@@ -9,8 +9,8 @@ import geojson as gj
 import requests.utils
 from tqdm.auto import tqdm
 
-from sentinelsat import __version__ as sentinelsat_version, make_path_filter
-from sentinelsat.sentinel import SentinelAPI, geojson_to_wkt, is_wkt, placename_to_wkt, read_geojson
+from lb_toolkits.utils import __version__ as sentinelsat_version, make_path_filter
+from lb_toolkits.utils.sentinel import SentinelAPI, geojson_to_wkt, is_wkt, placename_to_wkt, read_geojson
 
 json_parse_exception = json.decoder.JSONDecodeError
 
@@ -192,7 +192,7 @@ def validate_query_param(ctx, param, kwargs):
     "--gnss",
     is_flag=True,
     help="""Use the "https://scihub.copernicus.eu/gnss" end-point
-    for orbit data query and download.
+    for orbital data query and download.
     """,
 )
 @click.option(

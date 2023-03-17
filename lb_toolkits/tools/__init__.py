@@ -18,10 +18,11 @@ from .tifpro import *
 from .jsonpro import *
 from .gifpro import *
 
-from .spiderdownload import spiderdownload
+from .spider import spiderdownload, spiderhref, spidertable
 from .sftppro import *
 from .ftppro import *
 
-from .modis2tif import ConverModisByGDAL, modis2tif
-
 from .nc2tif import nc2tif
+from .RasterAndVector import *
+
+from .postemail import postemail

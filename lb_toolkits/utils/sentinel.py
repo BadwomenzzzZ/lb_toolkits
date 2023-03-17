@@ -16,8 +16,8 @@ import html2text
 import requests
 from tqdm.auto import tqdm
 
-from sentinelsat.download import DownloadStatus, Downloader
-from sentinelsat.exceptions import (
+from .download import DownloadStatus, Downloader
+from .exceptions import (
     InvalidChecksumError,
     InvalidKeyError,
     QueryLengthError,
@@ -1015,6 +1015,7 @@ class SentinelAPI:
         # Prevent requests from needing to guess the encoding
         # SciHub appears to be using UTF-8 in all of their responses
         response.encoding = "utf-8"
+        return
         try:
             response.raise_for_status()
             if test_json:

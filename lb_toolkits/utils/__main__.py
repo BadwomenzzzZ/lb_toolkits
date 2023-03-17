@@ -1,5 +1,5 @@
 import sys
 
-from sentinelsat.scripts.cli import cli as main
+from .scripts.cli import cli as main
 
 sys.exit(main())

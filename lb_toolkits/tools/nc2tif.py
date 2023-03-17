@@ -1,13 +1,18 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : nc2tif.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/8/5 16:05      Lee       1.0         
-@Description
-------------------------------------
- 
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+针对netCDF4数据，将数据集进行投影转换成GeoTiff文件
+
 '''
 import os
 import sys
@@ -20,12 +25,23 @@ from lb_toolkits.tools import writetiff
 def nc2tif(outname, filename, sdsname, fillvalue=-999):
     '''
     将NC文件中的数据集根据lat\lon维度进行投影输出geotiff文件
-    :param outname: str, 输出tif文件名
-    :param filename: str, 输入的nc文件名
-    :param sdsname: str， 需要转换的数据集名
-    :param fillvalue: 数据填充值
-    :return: bool，成功返回TRUE，失败返回FALSE
+
+    Parameters
+    ----------
+    outname: str
+        输出tif文件名
+    filename: str
+        输入的nc文件名
+    sdsname: str
+        需要转换的数据集名
+    fillvalue: float or int
+        数据填充值
+    Returns
+    -------
+        bool
+        成功返回TRUE，失败返回FALSE
     '''
+
     try:
         fp = netCDF4.Dataset(filename, 'r')
 

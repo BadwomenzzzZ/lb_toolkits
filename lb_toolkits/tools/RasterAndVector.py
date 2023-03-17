@@ -1,13 +1,18 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : RasterAndVector.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/7/13 17:49      Lee       1.0         
-@Description
-------------------------------------
- 
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+栅格和矢量数据文件操作
+
 '''
 import os
 import sys
@@ -66,8 +71,20 @@ class RasterPro() :
     def resample(self):
         raise Exception('本功能待开发，请耐心等待')
 
-    def clip(self):
-        raise Exception('本功能待开发，请耐心等待')
+    def clip(self, dsttif, srctif, shpname, fillvalue=None, resolution=None):
+        # raise Exception('本功能待开发，请耐心等待')
+        vec = ogr.Open(shpname)
+        layer = vec.GetLayer()
+        extent = layer.GetExtent()
+        minX, maxX, minY, maxY = extent
+        gdal.Warp(
+            dsttif, srctif,
+            format = 'GTiff',
+            outputBounds=(minX, minY, maxX, maxY) ,  # (minX, minY, maxX, maxY)
+            cutlineDSName=shpname, cropToCutline=True,
+            xRes=resolution, yRes=resolution,
+            dstNodata=fillvalue, creationOptions=["COMPRESS=LZW"]
+        )
 
     def merge(self, filelist, outname=None, resolution=None, fillvalue=None,
               epsg=4326, extent=None, resampleAlg=0):
@@ -147,10 +164,11 @@ class VectorPro():
     https://blog.csdn.net/summer_dew/article/details/87930241
     '''
     def __init__(self, encoding='GBK'):
-        gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")
-        gdal.SetConfigOption("SHAPE_ENCODING", encoding)
+        gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")  # 支持文件名称和文件路径中文
+        gdal.SetConfigOption("SHAPE_ENCODING", encoding)      # 支持属性字段中的中文
         gdal.UseExceptions()
         ogr.RegisterAll()
+
 
     def split(self, outpath, shapefilename, field):
         """
@@ -162,8 +180,6 @@ class VectorPro():
         """
         if not os.path.isdir(outpath) :
             os.makedirs(outpath)
-
-
 
         data = ogr.Open(shapefilename)
         layer = data.GetLayer()
@@ -278,15 +294,88 @@ class VectorPro():
 
         writejson(outname, dict(type= 'FeatureCollection', features=buffer))
 
-    def createPoint(self, shpname, coords={'lat':[], 'lon':[]}, epsg=4326):
+    def VectorTranslate(self, shpname, outdir,
+                        format="GeoJSON", accessMode=None, dstSrsESPG=4326,
+                        selectFields=None, geometryType="POLYGON", dim="XY"):
+        '''
+        转换矢量文件，包括坐标系，名称，格式，字段，类型，纬度等。
+
+        Parameters
+        ----------
+        shpname : str
+            要转换的矢量文件
+        outdir : str
+            生成矢量文件保存目录
+        format : str
+            矢量文件格式，强烈建议不要使用ESRI Shapefile格式。
+        accessMode : str
+            None代表creation,'update','append','overwrite'
+        dstSrsESPG : str
+            目标坐标系EPSG代码，4326是wgs84地理坐标系
+        selectFields : str
+            需要保留的字段列表如果都保留，则为None
+        geometryType : str
+            几何类型,"POLYGON","POINT"。。。
+        dim : str
+            新矢量文件坐标纬度,建议查阅官方API。
+        Returns
+        -------
+
+        '''
+
+        data = ogr.Open(shpname)
+        layer = data.GetLayer()
+        spatial = layer.GetSpatialRef()
+        layerName = layer.GetName()
+        data.Destroy()
+        dstSRS = osr.SpatialReference()
+        dstSRS.ImportFromEPSG(int(dstSrsESPG))
+        if format == "GeoJSON":
+            destDataName = layerName + ".geojson"
+            destDataPath = os.path.join(outdir, destDataName)
+        elif format == "ESRI Shapefile":
+            destDataName = os.path.join(outdir, layerName)
+            flag = os.path.exists(destDataName)
+            os.makedirs(destDataName) if not flag else None
+            destDataPath = os.path.join(destDataName, layerName + ".shp")
+        else:
+            print("不支持该格式！")
+            return
+        options = gdal.VectorTranslateOptions(
+            format=format,
+            accessMode=accessMode,
+            srcSRS=spatial,
+            dstSRS=dstSRS,
+            reproject=True,
+            selectFields=selectFields,
+            layerName=layerName,
+            geometryType=geometryType,
+            dim=dim
+        )
+        gdal.VectorTranslate(
+            destDataPath,
+            srcDS=shpname,
+            options=options
+        )
+        return destDataPath
+
+    def createPoint(self, shpname, coords, dictfield={}, layername=None, epsg=4326):
         '''
         利用GDAL 创建点矢量，将point转换成矢量数据
-        :param shpname: 输出文件名
-        :param coords: dict, eg. {'lat':[], 'lon':[]} 或者
-                       list, eg. [[lon1, lat1], [lon2, lat2],... ]
-        :param epsg: int,
-        :return: None
+
+        Parameters
+        ----------
+        shpname : str
+            输出文件名
+        coords: list
+            eg. [[lon1, lat1], [lon2, lat2],... ]
+        epsg: int
+
+        Returns
+        -------
+            None
         '''
+
         driver = ogr.GetDriverByName('ESRI Shapefile')
         # 如果文件存在，则删除后再创建
         if os.access(shpname, os.F_OK) :
@@ -295,25 +384,16 @@ class VectorPro():
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(int(epsg))
 
+        if layername is None :
+            layername = os.path.basename(shpname).replace('.shp','')
+
         ds = driver.CreateDataSource(shpname)
-        lyr = ds.CreateLayer('point', srs, ogr.wkbPoint)
+        lyr = ds.CreateLayer(layername, srs, ogr.wkbPoint)
+        for key in dictfield :
+            fieldName = ogr.FieldDefn(key, ogr.OFTString)
+            lyr.CreateField(fieldName)
 
-        if isinstance(coords, dict) :
-            if len(coords['lat']) != len(coords['lon']) :
-                raise Exception('输入的经、纬度点数不一致，经度：[%d]  纬度：[%d]'
-                                %(len(coords['lon']), len(coords['lat'])))
-
-            for i in range(len(coords['lat'])):
-                val_lat = float(coords['lat'][i])
-                val_lon = float(coords['lon'][i])
-
-                wkt = 'POINT(%f %f)' %(val_lon, val_lat)
-
-                geom = ogr.CreateGeometryFromWkt(wkt)
-                feature = ogr.Feature(lyr.GetLayerDefn())
-                feature.SetGeometry(geom)
-                lyr.CreateFeature(feature)
-        elif isinstance(coords, list) :
+        if isinstance(coords, list) :
             for item in coords:
                 val_lat = float(item[1])
                 val_lon = float(item[0])
@@ -325,20 +405,31 @@ class VectorPro():
                 feature.SetGeometry(geom)
                 lyr.CreateFeature(feature)
         else:
-            raise Exception('coords类型必须是dict或者list')
+            raise Exception('coords类型必须是list')
 
         ds = None
         driver =None
 
-    def createPolyline(self, shpname, coords={'lat':[], 'lon':[]}, epsg=4326):
+    def createPolyline(self, shpname, coords, dictfield={}, layername=None, epsg=4326):
         '''
         利用GDAL 创建线矢量，将polyline转换成矢量数据
-        :param shpname: 输出文件名
-        :param coords: dict, eg. {'lat':[], 'lon':[]} 或者
-                       list, eg. [[lon1, lat1], [lon2, lat2],... ]
-        :param epsg: int,
-        :return: None
+
+        Parameters
+        ----------
+        shpname : str
+            输出文件名
+        coords: list
+            eg. [
+                    [[lon11, lat11], [lon12, lat12],... ],  # line1
+                    [[lon21, lat21], [lon22, lat22],... ],  # line2
+                ]
+        epsg: int
+
+        Returns
+        -------
+            None
         '''
+
         driver = ogr.GetDriverByName('ESRI Shapefile')
         if os.access(shpname, os.F_OK) :
             driver.DeleteDataSource(shpname)
@@ -346,42 +437,57 @@ class VectorPro():
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(int(epsg))
 
+        if layername is None :
+            layername = os.path.basename(shpname).replace('.shp','')
+
         ds = driver.CreateDataSource(shpname)
-        lyr = ds.CreateLayer('polyline', srs, ogr.wkbLineString)
+        lyr = ds.CreateLayer(layername, srs, ogr.wkbLineString)
 
-        if isinstance(coords, dict) :
-            if len(coords['lat']) != len(coords['lon']) :
-                raise Exception('输入的经、纬度点数不一致，经度：[%d]  纬度：[%d]'
-                                %(len(coords['lon']), len(coords['lat'])))
+        for key in dictfield :
+            fieldName = ogr.FieldDefn(key, ogr.OFTString)
+            lyr.CreateField(fieldName)
 
-            count = len(coords['lat'])
-            for i in range(count-1):
-                if i == count-1:
-                    wkt = 'LINESTRING(%f %f,%f %f)' %(float(coords['lon'][i]), float(coords['lat'][i]),
-                                                      float(coords['lon'][0]), float(coords['lat'][0]))
-                else:
-                    wkt = 'LINESTRING(%f %f,%f %f)' %(float(coords['lon'][i]  ), float(coords['lat'][i]  ),
-                                                      float(coords['lon'][i+1]), float(coords['lat'][i+1]))
+        if isinstance(coords, list) :
+            # 逐线创建
+            for coord in coords :
+                count = len(coord)
+                wkt = 'LINESTRING('
+                for i in range(count) :
+                    if i == count-1:
+                        wkt += '%f %f' %(coord[i][0], coord[i][1])
+                    else:
+                        wkt += '%f %f,' %(coord[i][0], coord[i][1])
+                wkt += ')'
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feature = ogr.Feature(lyr.GetLayerDefn())
                 feature.SetGeometry(geom)
                 lyr.CreateFeature(feature)
-        elif isinstance(coords, list) :
-            pass
         else:
-            raise Exception('coords类型必须是dict或者list')
+            raise Exception('coords类型必须是list')
 
         ds = None
         driver =None
 
-    def createPolygon(self, shpname, coords={'lat':[], 'lon':[]}, epsg=4326):
+    def createPolygon(self, shpname, coords, dictfield={}, layername=None, epsg=4326):
         '''
         利用GDAL 创建面矢量，将polygon转换成矢量数据
-        :param shpname: 输出文件名
-        :param coords: dict, eg. {'lat':[], 'lon':[]}
-        :param epsg: int,
-        :return: None
+
+        Parameters
+        ----------
+        shpname : str
+            输出文件名
+        coords: list
+            eg. [
+                    [[lon11, lat11], [lon12, lat12],... ],  # polygon1
+                    [[lon21, lat21], [lon22, lat22],... ],  # polygon2
+                ]
+        epsg: int
+
+        Returns
+        -------
+            None
         '''
+
         driver = ogr.GetDriverByName('ESRI Shapefile')
         if os.access(shpname, os.F_OK) :
             driver.DeleteDataSource(shpname)
@@ -389,50 +495,145 @@ class VectorPro():
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(int(epsg))
 
+        if layername is None :
+            layername = os.path.basename(shpname).replace('.shp','')
+
         ds = driver.CreateDataSource(shpname)
-        lyr = ds.CreateLayer('polygon', srs, ogr.wkbPolygon)
+        lyr = ds.CreateLayer(layername, srs, ogr.wkbPolygon)
 
-        if isinstance(coords, dict) :
-            wkt = 'POLYGON(('
-            for i in range(len(coords)) :
-                item = coords[i]
-                if i == len(coords)-1:
-                    wkt = wkt + '%f %f' %(float(item['lon']), float(item['lat']))
-                else:
-                    wkt = wkt + '%f %f,' %(float(item['lon']), float(item['lat']))
-            wkt = wkt + '))'
+        for key in dictfield :
+            fieldName = ogr.FieldDefn(key, ogr.OFTString)
+            lyr.CreateField(fieldName)
 
-            geom = ogr.CreateGeometryFromWkt(wkt)
-            feature = ogr.Feature(lyr.GetLayerDefn())
-            feature.SetGeometry(geom)
-            lyr.CreateFeature(feature)
-        elif isinstance(coords, list) :
-            wkt = 'POLYGON(('
-            for i in range(len(coords)) :
-                item = coords[i]
-                if i == len(coords)-1:
-                    wkt = wkt + '%f %f' %(float(item['lon']), float(item['lat']))
-                else:
-                    wkt = wkt + '%f %f,' %(float(item['lon']), float(item['lat']))
-            wkt = wkt + '))'
+        if isinstance(coords, list) :
+            # 逐个面对象创建
+            for coord in coords :
+                count = len(coord)
+                wkt = 'POLYGON(('
+                for i in range(count) :
+                    if i == count-1:
+                        wkt += '%f %f' %(coord[i][0], coord[i][1])
+                    else:
+                        wkt += '%f %f,' %(coord[i][0], coord[i][1])
 
-            geom = ogr.CreateGeometryFromWkt(wkt)
-            feature = ogr.Feature(lyr.GetLayerDefn())
-            feature.SetGeometry(geom)
-            lyr.CreateFeature(feature)
+                # 为了形成闭合圆环，最后一个点必须是第一个点位置
+                if coord[count-1][0] != coord[0][0] and coord[count-1][1] != coord[0][1] :
+                    wkt += ',%f %f' %(coord[0][0], coord[0][1])
+
+                wkt = wkt + '))'
+
+                geom = ogr.CreateGeometryFromWkt(wkt)
+                feature = ogr.Feature(lyr.GetLayerDefn())
+                feature.SetGeometry(geom)
+                lyr.CreateFeature(feature)
         else:
-            raise Exception('coords类型必须是dict或者list')
+            raise Exception('coords类型必须是list')
 
         ds = None
         driver =None
 
+    def intersect(self, outname, srcfile, clipfile, layername=None):
+        '''
+        矢量求交，裁剪
 
+        Parameters
+        ----------
+        outname : str
+            输出裁剪结果文件
+        srcfile ： str
+            被裁剪对象
+        clipfile ：str
+            掩膜对象
+        layername ： str, optional
+            输出文件名图层名称
+
+        Returns
+        -------
+
+        '''
+        driver = ogr.GetDriverByName('ESRI Shapefile')
+        shp1 = driver.Open(srcfile, gdalconst.GA_ReadOnly)
+        shp2 = driver.Open(clipfile, gdalconst.GA_ReadOnly)
+        src_layer1 = shp1.GetLayer()
+        src_layer2 = shp2.GetLayer()
+        srs1 = src_layer1.GetSpatialRef()
+        srs2 = src_layer2.GetSpatialRef()
+        if srs1.GetAttrValue('AUTHORITY',1) != srs2.GetAttrValue('AUTHORITY',1):
+            raise Exception("空间参考不一致!")
+
+        target_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource(outname)
+        target_layer = target_ds.CreateLayer(layername, srs1, geom_type=ogr.wkbPolygon, options=["ENCODING=UTF-8"]) # 设置编码为UTF-8，防止中文出现乱码
+
+        for feat1 in src_layer1:
+            geom1 = feat1.GetGeometryRef()
+            for feat2 in src_layer2:
+                geom2 = feat2.GetGeometryRef()
+                if not geom1.Intersects(geom2):
+                    continue
+                intersect = geom1.Intersection(geom2)
+                feature = ogr.Feature(target_layer.GetLayerDefn())
+                feature.SetGeometry(intersect)
+                target_layer.CreateFeature(feature)
+
+        # 清理引用
+        target_layer = None
+        ds = None
+
+
+
+# def contourGenerate(dstLayer, srcBand, contourInterval, contourBase,
+#                     fixedLevelCount, useNoData, noDataValue,  idField, elevField):
+#     gdal.ContourGenerate()
+
+def contour(srcfile, dstfile, attrname, interval, offset=0, band=1,
+            srcNoData=None, polygons=False, format='ESRI Shapefile'):
+    ''' 创建等值线 '''
+
+    #  The gdal_contour generates a vector contour file
+    #      from the input raster elevation model (DEM).
+    #     The contour line-strings are oriented consistently
+    #     and the high side will be on the right,
+    #     i.e. a line string goes clockwise around a top.
+    #
+
+    # gdal_contour [-b <band>] [-a <attribute_name>] [-amin <attribute_name>] [-amax <attribute_name>]
+    # [-3d] [-inodata]
+    # [-snodata n] [-i <interval>]
+    # [-f <formatname>] [[-dsco NAME=VALUE] ...] [[-lco NAME=VALUE] ...]
+    # [-off <offset>] [-fl <level> <level>...] [-e <exp_base>]
+    # [-nln <outlayername>] [-q] [-p]
+    # <src_filename> <dst_filename>
+
+    cmd = 'gdal_contour -f "{format}" {srcfile} {dstfile} ' \
+          '-b {band} -a {attrname} -i {interval} -off {offset}'.format(
+        format=format,
+        srcfile = srcfile,
+        dstfile = dstfile,
+        band=band,
+        attrname=attrname,
+        interval=interval,
+        offset=offset
+    )
+    if srcNoData is not None :
+        cmd += f' -snodata {srcNoData}'
+
+    if polygons :
+        cmd += ' -p'
+    print('command:%s' %(cmd))
+    status = os.system(cmd)
+    print(status)
 
 def getGDALType(datatype):
     '''
     根据numpy的数据类型，匹配GDAL中的数据类型
-    :param datatype:
-    :return: GDAL数据类型
+
+    Parameters
+    ----------
+    datatype
+
+    Returns
+    -------
+        GDAL数据类型
     '''
 
     if datatype == np.byte or datatype == np.uint8:
@@ -453,11 +654,42 @@ def getGDALType(datatype):
         return gdal.GDT_Unknown
 
 
-def getNPDType(datatype) :
+def getOGRType(dtype) :
+    '''
+    根据numpy的数据类型，匹配OGR中的数据类型
 
+    Parameters
+    ----------
+    dtype
+
+    Returns
+    -------
+        OGR数据类型
+    '''
+
+    if dtype == np.byte or dtype == np.uint8:
+        return ogr.OFTString
+    elif dtype == np.uint16 or dtype == np.int16 :
+        return ogr.OFSTInt16
+    elif dtype == np.uint32 or dtype == np.int32  :
+        return ogr.OFTInteger
+    elif dtype == np.int64 :
+        return ogr.OFTInteger64
+    elif dtype == np.float32 :
+        return ogr.OFSTFloat32
+    elif dtype == np.float64 :
+        return ogr.OFTReal
+    else:
+        return ogr.OJUndefined
+
+def getNPDType(datatype) :
+    '''将numpy.dtype转换成 gdal Type'''
     if 'int' in datatype:
         return gdal.GDT_Int32
     elif 'float' in datatype:
         return gdal.GDT_Float32
     else:
         return gdal.GDT_Unknown
+
+
+

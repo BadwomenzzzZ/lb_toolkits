@@ -1,21 +1,29 @@
 # -*- coding:utf-8 -*-
 '''
 @Project  : lb_toolkits
+
 @File     : hdf4pro.py
-@Modify Time      @Author    @Version    
---------------    -------    --------    
-2022/7/12 18:09      Lee       1.0         
-@Description
-------------------------------------
- 
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+对hdf4文件进行读写
+
 '''
 import os
 
 def readhdf4(h4file, sdsname, dictsdsattrs=None, dictfileattrs=None):
+    ''' 读取hdf4数据集 '''
+    data = None
+
     from pyhdf import SD
     if not os.path.isfile(h4file):
         print('%s is not exist, will continue...' %(h4file))
-        return False
+        return data
 
     fp4 = SD.SD(h4file, SD.SDC.READ)
 
@@ -38,6 +46,7 @@ def readhdf4(h4file, sdsname, dictsdsattrs=None, dictfileattrs=None):
 
 
 def readhdf4sdsattrs(h4file, sdsname):
+    ''' 读取hdf4文件数据集属性信息'''
     from pyhdf import SD
 
     sdsattrs = {}
@@ -57,6 +66,7 @@ def readhdf4sdsattrs(h4file, sdsname):
 
 
 def readhdf4fileattrs(h4file):
+    ''' 读取hdf4文件属性'''
     from pyhdf import SD
 
     fileattrs = {}

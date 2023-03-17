@@ -25,17 +25,13 @@ exedir = os.path.abspath(list(parm.__path__)[0])
 from lb_toolkits.downloadcentre import downwgetfromgithub
 
 if platform.system().lower() == 'windows' :
-    WGET = os.path.join(exedir, 'bin', 'windows', 'wget.exe')
+    WGET = os.path.join(exedir, 'bin', 'wget.exe')
     if not os.path.isfile(WGET) :
         downwgetfromgithub(WGET)
         if not os.path.isfile(WGET) :
             raise Exception('wget is not command')
 else:
-    WGET = os.path.join(exedir, 'bin', 'linux', 'wget.exe')
-    if not os.path.isfile(WGET) :
-        downwgetfromgithub(WGET)
-        if not os.path.isfile(WGET) :
-            raise Exception('wget is not command')
+    WGET = None
 
 
 #########################################################################################################
@@ -53,8 +49,6 @@ HY_FTP_URL = 'osdds-ftp.nsoas.org.cn'
 # CMR查询根节点
 CMR_URL = 'https://cmr.earthdata.nasa.gov'
 
-URS_URL = 'https://urs.earthdata.nasa.gov'
-
 # 登录NASA
 LOGIN_NASA_URL = 'https://urs.earthdata.nasa.gov/home'
 
@@ -63,7 +57,7 @@ LOGIN_NASA_URL = 'https://urs.earthdata.nasa.gov/home'
 CALIPSO_URL = 'https://asdc.larc.nasa.gov/data/'
 
 # OCO-2/3
-OCO_URL = 'https://oco2.gesdisc.eosdis.nasa.gov/data/'
+OCO_URL = 'https://oco2.gesdisc.eosdis.nasa.gov/data/OCO2_DATA/'
 
 # 哨兵数据
 S5PHUB_URL = 'https://s5phub.copernicus.eu/dhus/'

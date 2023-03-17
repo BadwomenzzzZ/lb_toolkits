@@ -1,10 +1,24 @@
-#coding:utf-8
+# -*- coding:utf-8 -*-
+'''
+@Project  : lb_toolkits
 
+@File     : hdfpro.py
+
+@Modify Time : 2022/8/11 15:34
+
+@Author : Lee
+
+@Version : 1.0
+
+@Description :
+对hdf5文件进行读写操作
+
+'''
 import os
 import h5py
 
 def readhdf(filename, sdsname, dictsdsinfo=None) :
-    '''
+    r'''
     读取hdf数据集和属性
     :param filename:
     :param sdsname:
@@ -56,9 +70,8 @@ def readhdf_fileinfo(filename) :
         fp.close()
         return dictfileinfo
 
-def writehdf(filename, sdsname, data, overwrite=True,
-             dictsdsinfo = None, dictfileinfo = None,
-             compression = 9, info = False):
+def writehdf(filename, sdsname, data, overwrite=True, dictsdsinfo=None, dictfileinfo=None,
+             compression=9, info = False):
     '''
     创建hdf5文件
     :param filename:

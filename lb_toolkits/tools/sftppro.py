@@ -17,15 +17,12 @@ import time
 import paramiko
 import stat
 
-exepath = os.path.dirname(__file__)
-sys.path.append(exepath)
-sys.path.append(os.path.join(exepath, '/'))
 
 class sftppro(object):
 
     def __init__(self, ip=None, port=22,
                  username=None, password=None,
-                 PKEY=None):
+                 PKEY=None, timeout=5*60):
         self.ip = ip
         self.port = port
         self.username = username
@@ -33,10 +30,11 @@ class sftppro(object):
         self.PKEY = PKEY
         self.sftp = None
         self.trans = None
+        self.timeout = timeout
 
-        self.connect()
+        self.connect(timeout)
 
-    def connect(self):
+    def connect(self, timeout=5*60):
         try:
             if self.password is None and self.PKEY is not None:  # 如果没有传入密码，则以秘钥方式登录
                 # 指定本地的RSA私钥文件,如果建立密钥对时设置的有密码，password为设定的密码，如无不用指定password参数
@@ -57,7 +55,10 @@ class sftppro(object):
                 # 建立FTP通道
                 self.sftp = paramiko.SFTPClient.from_transport(self.trans)
         except Exception as e:
-            raise Exception('Connect %s failed!!' %(self.ip))
+            raise Exception('连接【%s】失败' %(self.ip))
+
+        if self.sftp is not None :
+            self.sftp.sock.settimeout(timeout)
 
     def close(self):
         '''
@@ -85,6 +86,8 @@ class sftppro(object):
         :return:
         '''
 
+
+
         remotefile = remotepath
         # 判断是否为文件，是文件则下载，否则递归该目录
         if stat.S_ISREG(self.sftp.stat(remotefile).st_mode):
@@ -95,32 +98,37 @@ class sftppro(object):
         else:
             # 开始对远程目录进行list，列出所有文件和目录
             fils = self.sftp.listdir_attr(remotepath)
+
             filecount = len(fils)
             for f in fils:
-
-                remotefile = os.path.join(remotepath, f.filename)
-                if stat.S_ISREG(self.sftp.stat(remotefile).st_mode):
-                    self._download(remotefile, localpath,
-                                   retry=retry,
-                                   okstatus=okstatus,
-                                   redownload=redownload,
-                                   id = filecount)
-                else:
-                    if pathdownload :
-                        localpath = os.path.join(localpath, f.filename)
-                        if not os.path.isdir(localpath):
-                            os.makedirs(localpath)
-                        # 暂不轮循下载目录下载的所有文件夹
-                        self.DownloadPath(remotefile, localpath,
-                                          retry=retry,
-                                          okstatus=okstatus,
-                                          redownload=redownload,
-                                          pathdownload=pathdownload)
+                try:
+                    remotefile = os.path.join(remotepath, f.filename)
+                    remotefile = remotefile.replace('\\', '/')
+                    if stat.S_ISREG(self.sftp.stat(remotefile).st_mode):
+                        self._download(remotefile, localpath,
+                                       retry=retry,
+                                       okstatus=okstatus,
+                                       redownload=redownload,
+                                       id = filecount)
                     else:
-                        print('%s is file folder, will continue it...' % (remotefile))
+                        if pathdownload :
+                            localpath = os.path.join(localpath, f.filename)
+                            if not os.path.isdir(localpath):
+                                os.makedirs(localpath)
+                            # 暂不轮循下载目录下载的所有文件夹
+                            self.DownloadPath(remotefile, localpath,
+                                              retry=retry,
+                                              okstatus=okstatus,
+                                              redownload=redownload,
+                                              pathdownload=pathdownload)
+                        else:
+                            print('%s is file folder, will continue it...' % (remotefile))
 
-                filecount -= 1
-
+                    filecount -= 1
+                except BaseException as e :
+                    print('下载文件失败【%s】' %(os.path.basename(remotefile)))
+                    if os.path.isfile(localpath) :
+                        os.remove(localpath)
 
     def upload(self, localpath, remotepath,
                retry=3,
@@ -169,7 +177,6 @@ class sftppro(object):
         stdin, stdout, stderr = self.ssh.exec_command(command)
         print(stdout.read().decode())
 
-
     def makedirs(self, path):
         '''
         创建远程路径下的文件夹，如果不存在则直接创建，存在则跳过
@@ -190,7 +197,6 @@ class sftppro(object):
             except BaseException as e:
                 raise Exception('create remote path ==>> %s error!!!' %(os.path.join(path, filename)))
 
-
     def _upload(self, local_filename, remote_path, retry=3, okstatus=False, reupload=False):
         # 判断远程端目录是否存在，如果不存在，则创建
         filename = os.path.basename(local_filename)
@@ -202,32 +208,32 @@ class sftppro(object):
             PathFlag = True
         if PathFlag:  # 远程路径不存在
             try:
-                print(self.GetStrTime(), '%s is not exist, will be created...' % (remote_path))
+                print(self.GetStrTime(), '文件路径不存在，将创建【%s】' % (remote_path))
 
                 # 远程路径不存在，则创建多级目录
                 self.makedirs(remote_path)
             except Exception as e:
                 print(e)
-                print('%s Create Fail, will continue ...' %(remote_path))
+                print('创建路径失败【%s】' %(remote_path))
                 return False
 
         if os.path.isfile(local_filename):
             try:
                 # 将本地文件写入到远程文件
                 self.sftp.put(local_filename, remote_filename)
-                print('Success to upload %s ...' %(remote_filename))
+                print('成功上传【%s】' %(remote_filename))
             except Exception as e:
-                print('Fail to upload %s ...' % (remote_filename))
+                print('上传失败【%s】' % (remote_filename))
                 print(e)
 
         else:
-            print('%s is not exist, will be return' %(local_filename))
+            print('文件不存在【%s】' %(local_filename))
             return False
 
         return True
 
     def UploadPath(self, local_path, remote_path, retry=3, okstatus=False, reupload=False, pathupload=False):
-        print('Now, star to upload %s' %(local_path))
+        print('正在上传【%s】' %(local_path))
 
         fils = os.listdir(local_path)
         for item in fils :
@@ -257,17 +263,33 @@ class sftppro(object):
         :param prefetch:
         :return:
         '''
-        with open(localpath, "wb") as writer:
-            file_size = self.sftp.stat(remotepath).st_size
-            with self.sftp.open(remotepath, "rb") as reader:
-                if prefetch:
-                    reader.prefetch(file_size)
 
-                size = 0
-                from tqdm import tqdm
-                with tqdm(
-                        total=file_size, unit_scale=True, unit="B", unit_divisor=chucksize
-                ) as pbar:
+
+        continuing = os.path.isfile(localpath)
+        if continuing:
+            already_downloaded_bytes = os.path.getsize(localpath)
+        else:
+            already_downloaded_bytes = 0
+
+        file_size = self.sftp.stat(remotepath).st_size
+
+        mode = "ab" if continuing else "wb"
+
+        basename = os.path.basename(localpath).replace('.download','')
+        with open(localpath, mode) as writer:
+            # 进度条
+            from tqdm import tqdm
+            with tqdm(
+                    total=file_size, unit_scale=True, unit="B", desc=f"正在下载【{basename}】",
+                    unit_divisor=chucksize, initial=already_downloaded_bytes
+            ) as pbar:
+                with self.sftp.open(remotepath, "rb") as reader:
+                    if prefetch:
+                        reader.prefetch(file_size)
+
+                    size = already_downloaded_bytes
+                    reader.seek(size)
+
                     while True:
                         data = reader.read(chucksize)
                         writer.write(data)
@@ -279,11 +301,11 @@ class sftppro(object):
 
                         pbar.update(len(data))
 
-        s = os.stat(localpath)
-        if s.st_size != size:
-            raise IOError(
-                "size mismatch in get!  {} != {}".format(s.st_size, size)
-            )
+        localsize = os.path.getsize(localpath)
+        if localsize != file_size:
+            return False
+        else:
+            return True
 
     def _download(self, remotefile, localpath, retry=3, okstatus=False, redownload=False, id=1):
         '''
@@ -299,26 +321,28 @@ class sftppro(object):
         '''
 
         if not os.path.isdir(localpath):
-            print('%s is not exist, will be created...' % (localpath))
+            print('路径不存在，将创建【%s】' % (localpath))
             os.makedirs(localpath)
 
         filename = os.path.basename(remotefile)
         localfile = os.path.join(localpath, filename)
         tempfile = localfile + '.download'
 
+        # if os.path.isfile(tempfile) and not redownload :
+        #     print('[%d]文件已存在，跳过下载【%s】'  %(id, localfile))
+        #     return False
+
         if os.path.isfile(localfile) and not redownload :
-            print('[%d] %s is exist, will continue ...'  %(id, localfile))
+            print('[%d]文件已存在，跳过下载【%s】'  %(id, localfile))
             return False
-        print('[%d]start to download %s ...' %(id, localfile))
+        print('[%d]开始下载【%s】' %(id, localfile))
         for i in range(retry) :
 
             # 判断远程文件是否是一个文件，是文件则下载该文件，否则返回
             if stat.S_ISREG(self.sftp.stat(remotefile).st_mode):  # remote is file
                 try:
                     # 调用get下载远程文件
-                    self.get(remotefile, tempfile)
-
-                    if os.path.isfile(tempfile) :
+                    if self.get(remotefile, tempfile) :
                         os.rename(tempfile, localfile)
                     # print('[%d]success to download %s ...' %(id, localfile))
 
@@ -330,7 +354,7 @@ class sftppro(object):
                 except BaseException as e:
                     print(e)
             else:
-                print('Remote File %s is not exist, will be return...' % (remotefile))
+                print('远程文件不存在，将跳过下载【%s】' % (remotefile))
                 return False
 
     def DownloadPath(self, remote_path, local_path, retry=3, okstatus=False, redownload=False, pathdownload=False):
@@ -425,8 +449,8 @@ class sftppro(object):
         return time.strftime('[%Y-%m-%d %H:%M:%S]:',
                              time.localtime(time.time()))
 
-
-
+    def __del__(self):
+        self.close()
 
 
 

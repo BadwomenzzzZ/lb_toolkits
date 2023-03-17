@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict
 from xml.etree import ElementTree as etree
 
-from sentinelsat.exceptions import (
+from .exceptions import (
     InvalidChecksumError,
     LTAError,
     LTATriggered,
@@ -86,7 +86,7 @@ class Downloader:
         lta_retry_delay=60,
         lta_timeout=None
     ):
-        from sentinelsat import SentinelAPI
+        from .sentinel import SentinelAPI
 
         self.api: SentinelAPI = api
         self.logger = self.api.logger
@@ -721,6 +721,7 @@ class Downloader:
         raise last_exception
 
     def _download(self, url, path, file_size, title, stop_event):
+        print('下载地址："%s"' %(url))
         headers = {}
         continuing = path.exists()
         if continuing:

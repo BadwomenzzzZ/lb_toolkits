@@ -15,8 +15,12 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 # INSTALL_PACKAGES = open(os.path.join(DIR, 'requirements.txt')).read().splitlines()
 
 
-__version__ = '1.1.8'
-# from .lb_toolkits import __version__
+# __version__ = '1.1.12'
+# from lb_toolkits import __version__
+# from lb_toolkits.version import version as __version__
+
+from lb_toolkits.version import get_versions
+__version__ = get_versions()['version']
 
 mod_expy=Extension('',
                    sources=[],
@@ -49,7 +53,7 @@ setup(
     long_description = readme,
     long_description_content_type = content_type,
     # url='', # 如果有github之类的相关链接
-    author = 'Lee', # 作者
+    author = 'The lb_toolkits Team', # 作者
     # author_email='xxx@163.com', # 邮箱
     license = 'MIT',
     platforms = ["windows", 'linux'],
@@ -60,6 +64,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
     ],
+    url='https://github.com/libin033/lb_toolkits',
     keywords=['FengYun', 'Meteorology', 'RemoteSensing',
               'hdf', 'netcdf', 'spider'], # 关键词之间空格相隔一般
     # 需要安装的依赖
@@ -72,11 +77,10 @@ setup(
         'tqdm >= 4.0.0',
         'gdal >= 2.0.0',
         'pyshp >= 2.1.0',
-        'pillow >= 7.0.0',
+        'pillow >= 6.0.0',
         'imageio >= 2.15.0',
         'paramiko >= 2.10.0',
         'cdsapi >= 0.5.0',
-        # 'sentinelsat >= 1.1.0',
     ],
     setup_requires = [
 

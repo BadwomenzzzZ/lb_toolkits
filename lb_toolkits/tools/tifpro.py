@@ -12,15 +12,9 @@
 '''
 
 
-
 import numpy as np
-try:
-    from osgeo import gdal, gdalconst, osr, ogr
-except ImportError:
-    try:
-        import gdal, gdalconst, osr, ogr
-    except ImportError:
-        raise ImportError('Python GDAL library not found, please install python-gdal')
+from osgeo import gdal, gdalconst, osr, ogr
+
 
 
 def readtiff(filename):
@@ -45,9 +39,6 @@ def readtiff(filename):
     del dataset
 
     return im_data, im_geotrans, im_proj
-
-
-
 
 def writetiff(outname, data, im_geotrans=None, im_proj=None, fillvalue=None):
     '''
@@ -74,7 +65,7 @@ def writetiff(outname, data, im_geotrans=None, im_proj=None, fillvalue=None):
         im_bands, (im_height, im_width) = 1,im_data.shape
         #创建文件
     driver = gdal.GetDriverByName("GTiff")
-    dataset = driver.Create(outname, im_width, im_height, im_bands, datatype, options=["COMPRESS=LZW"])
+    dataset = driver.Create(outname, im_width, im_height, im_bands, datatype,  options=["COMPRESS=LZW"])
     if(dataset!= None):
 
         if not im_geotrans is None :
@@ -95,7 +86,7 @@ def writetiff(outname, data, im_geotrans=None, im_proj=None, fillvalue=None):
         for i in range(im_bands):
             dataset.GetRasterBand(i+1).WriteArray(im_data[i])
 
-    if fillvalue:
+    if fillvalue is not None:
         dataset.GetRasterBand(1).SetNoDataValue(float(fillvalue))
         # dataset.GetRasterBand(1).Fill(float(fillvalue))
 

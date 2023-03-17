@@ -9,14 +9,31 @@
 ------------------------------------
  
 '''
+
+from .downloadGithub import downwgetfromgithub
+from .cmr import cmr
+
+
 from .downloadERA5 import *
 from .downloadGFS import *
 from .downloadLandsat import *
 from .downloadSentinel import *
 
-from .downloadH8 import downh8file
+from .downloadH8 import downloadH8
 from .downloadFY import downloadFY
+from .downloadHY import downloadHY
 
+from .downloadTANSAT import downloadTANSAT
 from .downloadOCO import downloadOCO
+from .downloadCALIPSO import downloadCALIPSO
+
 from .downloadMODIS import downloadMODIS
+
+from .downloadGOSAT import downloadGOSAT
+
+
+from .downloadDEM import downloadDEM
+from .downloadLandcover import downloadLandcover
+
+
 
