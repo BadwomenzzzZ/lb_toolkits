@@ -84,7 +84,7 @@ def downloadGFS(outdir, nowdate, issuetime=0, forecasttime=[0], regoin=None, tim
                           f'--timeout={timeout}' \
                           f'  -P {outdir}'
                 else:
-                    cmd = f'wget "{url}" --tries=3 ' \
+                    cmd = f'{WGET} "{url}" --tries=3 ' \
                           f'--timeout={timeout}' \
                           f'  -P {outdir}'
                 print(cmd)

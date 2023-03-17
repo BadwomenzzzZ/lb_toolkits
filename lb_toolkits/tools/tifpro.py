@@ -63,7 +63,8 @@ def writetiff(outname, data, im_geotrans=None, im_proj=None, fillvalue=None):
         im_bands, (im_height, im_width) = 1,im_data.shape
     else:
         im_bands, (im_height, im_width) = 1,im_data.shape
-        #创建文件
+
+    #创建文件
     driver = gdal.GetDriverByName("GTiff")
     dataset = driver.Create(outname, im_width, im_height, im_bands, datatype,  options=["COMPRESS=LZW"])
     if(dataset!= None):

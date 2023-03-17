@@ -25,13 +25,17 @@ exedir = os.path.abspath(list(parm.__path__)[0])
 from lb_toolkits.downloadcentre import downwgetfromgithub
 
 if platform.system().lower() == 'windows' :
-    WGET = os.path.join(exedir, 'bin', 'wget.exe')
+    WGET = os.path.join(exedir, 'bin', 'windows', 'wget.exe')
     if not os.path.isfile(WGET) :
         downwgetfromgithub(WGET)
         if not os.path.isfile(WGET) :
-            raise Exception('wget is not command')
+            raise Exception('wget工具不可用')
 else:
-    WGET = None
+    WGET = os.path.join(exedir, 'bin', 'linux', 'wget')
+    if not os.path.isfile(WGET) :
+        downwgetfromgithub(WGET)
+        if not os.path.isfile(WGET) :
+            raise Exception('wget工具不可用')
 
 
 #########################################################################################################

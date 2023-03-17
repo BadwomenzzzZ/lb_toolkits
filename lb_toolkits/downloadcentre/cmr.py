@@ -363,7 +363,7 @@ class cmr() :
                   f'-e robots=off -c -np -R .html,.tmp -nH --cut-dirs=10 {url} ' \
                   f'--header "Authorization: Bearer {token}" -O {tempfile}'
         else:
-            cmd = f'wget --tries={tries} --no-check-certificate ' \
+            cmd = f'{WGET} --tries={tries} --no-check-certificate ' \
                   f'-e robots=off -c -np -R .html,.tmp -nH --cut-dirs=10 {url} ' \
                   f'--header "Authorization: Bearer {token}" -O {tempfile}'
 

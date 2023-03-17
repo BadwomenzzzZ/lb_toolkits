@@ -137,7 +137,7 @@ def wget(outdir, url, username, password, tries=3, skip=False, cover=False):
         cmd = f'{WGET} --tries={tries} -c -np {url} ' \
               f'--http-user={username} --http-passwd={password} -O {tempfile}'
     else:
-        cmd = f'wget --tries={tries} -c -np {url} ' \
+        cmd = f'{WGET} --tries={tries} -c -np {url} ' \
               f'--http-user={username} --http-passwd={password} -O {tempfile}'
 
     print('执行下载命令: 【%s】' %(cmd))

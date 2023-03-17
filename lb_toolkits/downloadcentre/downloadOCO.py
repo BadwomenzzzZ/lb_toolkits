@@ -126,7 +126,7 @@ class downloadOCO(cmr):
                   f'--timeout={timeout}' \
                   f'  -O {tempfile}'
         else:
-            cmd = f'wget {url}  -c --tries=3 ' \
+            cmd = f'{WGET} {url}  -c --tries=3 ' \
                   f'--http-user={self.username} ' \
                   f'--http-passwd={self.password} ' \
                   f'--timeout={timeout}' \

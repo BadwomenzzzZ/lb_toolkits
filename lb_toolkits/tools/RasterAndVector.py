@@ -619,7 +619,7 @@ def contour(srcfile, dstfile, attrname, interval, offset=0, band=1,
 
     if polygons :
         cmd += ' -p'
-    print('command:%s' %(cmd))
+    print('执行下载命令: 【%s】' %(cmd))
     status = os.system(cmd)
     print(status)
 

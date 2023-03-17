@@ -506,7 +506,7 @@ class downloadFY(object):
                       '成功下载文件【%d】:【%s】' %(count, dstname))
 
             etime = time.time()
-            print('cost %.2f sec...' %(etime - stime))
+            print('耗时【%.2f秒】' %(etime - stime))
 
         return self.dstfilelist
 
