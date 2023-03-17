@@ -1,0 +1,10 @@
+include LICENSE
+include MANIFEST.in
+include README.md
+
+recursive-include lb_toolkits/bin *
+recursive-include lb_toolkits/docs *
+recursive-include lb_toolkits/downloadcentre *
+recursive-include lb_toolkits/tools *
+recursive-include lb_toolkits/utils *
+
