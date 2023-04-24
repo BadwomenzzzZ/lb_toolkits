@@ -9,7 +9,7 @@
 
 downloadcentre更新
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-* 增加下载清华源、ESRI 10米的LandCover数据
+* 增加下载清华源、ESRI 10米的LandCover数据，详见``lb_toolkits.downloadcentre.downloadLandcover``
 
 
 [1.2.3] – 2023-03-12
