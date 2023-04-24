@@ -249,7 +249,10 @@ downloadLandcover
 
     from lb_toolkits.downloadcentre import downloadLandcover
 
-    fils = downloadLandcover(outdir='./data/landcover', minX=100, maxX=110, minY=25, maxY=35)
-    for file in fils :
-        print(file)
+    down = downloadLandcover()
+    fils = down.from_tsinghua(outdir='./data/landcover', minX=100, maxX=110, minY=25, maxY=35)
+
+    urllist = down.from_esri(r'./data/landcover',
+                             datetime.datetime.strptime('2021', '%Y'),
+                             extent=(70, 20, 120, 55))
 

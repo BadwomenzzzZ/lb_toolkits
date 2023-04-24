@@ -31,7 +31,7 @@ class ftppro():
 
         self.connect()
 
-    def connect(self, timeout=3*60):
+    def connect(self, timeout=5*60):
 
         connflag = False
         try:
@@ -123,6 +123,15 @@ class ftppro():
         except BaseException as e:
             print(e)
             print('下载文件失败【%s】' %(localFile))
+            print('再尝试一次下载文件【%s】' %(localFile))
+            try:
+                self._download(ftp, tempfile, remoteFile, blocksize=blocksize)
+                if os.path.isfile(tempfile) :
+                    os.rename(tempfile, localFile)
+                return localFile
+            except BaseException as e:
+                print(e)
+                print('再次下载文件失败【%s】' %(localFile))
             return None
 
     def uploadFile(self, localfile, remotePath, blocksize = 1 * 1024):
